@@ -3,36 +3,61 @@ package com.scaledcode;
 import java.util.Arrays;
 
 public class SideChannelAttack {
-    private static char[] possibleCharacters = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQURSTUWXYZ1234567890".toCharArray();
+    private static final char[] possibleCharacters = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQURSTUWXYZ1234567890".toCharArray();
 
-    private static boolean verifyPassword(String realPassword, String providedPassword) {
+    private static boolean verifyPassword(String realPassword, String providedPassword, VerificationMethod method) {
         if (realPassword.length() != providedPassword.length()) {
             return false;
         }
 
+        switch (method) {
+            case NAIVE:
+                return verifyPasswordNaive(realPassword, providedPassword);
+            case BITWISE:
+                return verifyPasswordBitwise(realPassword, providedPassword);
+            case SAFE_READABLE:
+                return verifyPasswordSafeReadable(realPassword, providedPassword);
+            default:
+                throw new RuntimeException("Unknown method: " + method);
+        }
+    }
+
+    private static boolean verifyPasswordNaive(String realPassword, String providedPassword) {
+        for (int i = 0; i < realPassword.length(); i++) {
+            if (realPassword.charAt(i) != providedPassword.charAt(i)) {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    private static boolean verifyPasswordBitwise(String realPassword, String providedPassword) {
+        int result = 0;
+        for (int i = 0; i < realPassword.length(); i++) {
+            result |= realPassword.charAt(i) ^ providedPassword.charAt(i);
+        }
+
+        return result == 0;
+    }
+
+    private static boolean verifyPasswordSafeReadable(String realPassword, String providedPassword) {
         boolean mismatch = false;
         for (int i = 0; i < realPassword.length(); i++) {
             mismatch = (realPassword.charAt(i) != providedPassword.charAt(i)) || mismatch;
-            //result |= realPassword.charAt(i) ^ providedPassword.charAt(i);
-//            try {
-//                Thread.sleep(1);
-//            } catch (InterruptedException e) {
-//                e.printStackTrace();
-//            }
         }
 
         return !mismatch;
     }
 
-    private static void crackPassword(String realPassword) {
-        int passwordSize = guessSize(realPassword);
-        //int passwordSize = 4;
-        System.out.println("Size: " + passwordSize);
-        System.out.println("Final result: " + crackPassword(realPassword, "", passwordSize, passwordSize));
+    private static void crackPassword(String realPassword, VerificationMethod method) {
+        int passwordSize = guessSize(realPassword, method);
 
+        System.out.println("Size: " + passwordSize);
+        System.out.println("Final result: " + crackPassword(realPassword, "", passwordSize, passwordSize, method));
     }
 
-    private static String crackPassword(String realPassword, String prefix, int remainingCharacters, int fullSize) {
+    private static String crackPassword(String realPassword, String prefix, int remainingCharacters, int fullSize, VerificationMethod method) {
         if (remainingCharacters == 0) {
             return prefix;
         }
@@ -46,7 +71,7 @@ public class SideChannelAttack {
             for (int j=0; j < result.length; j++) {
                 long start = System.nanoTime();
 
-                verifyPassword(realPassword, testPassword);
+                verifyPassword(realPassword, testPassword, method);
                 result[j] = System.nanoTime() - start;
             }
 
@@ -59,10 +84,10 @@ public class SideChannelAttack {
 
         System.out.println("Current known: " + currentGuess);
 
-        return crackPassword(realPassword, currentGuess, remainingCharacters -1, fullSize);
+        return crackPassword(realPassword, currentGuess, remainingCharacters -1, fullSize, method);
     }
 
-    private  static int guessSize(String realPassword) {
+    private  static int guessSize(String realPassword, VerificationMethod method) {
         var sizeTimers = new long[18];
 
         for (int i=0; i<sizeTimers.length; i++) {
@@ -70,7 +95,7 @@ public class SideChannelAttack {
             long start = System.nanoTime();
             for (int j=0; j<1001; j++) {
 
-                verifyPassword(realPassword, testStringOfLength);
+                verifyPassword(realPassword, testStringOfLength, method);
             }
             sizeTimers[i] =  System.nanoTime() - start;;
         }
@@ -78,7 +103,7 @@ public class SideChannelAttack {
         return largestIndex(sizeTimers) + 1;
     }
 
-    private static int largestIndex(long timings[]) {
+    private static int largestIndex(long[] timings) {
         int largestIndex = -1;
         long largestValue = -1;
         for (int i=0; i<timings.length; i++) {
@@ -92,24 +117,24 @@ public class SideChannelAttack {
     }
 
     private static String padding(String current, int size) {
-        var padded = current;
-        for (int i=current.length(); i<size; i++) {
-            padded += 'a';
-        }
-        return padded;
+        return current + "a".repeat(Math.max(0, size - current.length()));
     }
 
-
     private static String stringOfSize(int size) {
-        StringBuilder builder = new StringBuilder(size);
-        for (int i=0; i<size; i++) {
-            builder.append('A');
-        }
-
-        return builder.toString();
+        return "A".repeat(Math.max(0, size));
     }
 
     public static void main(String[] args) {
-        crackPassword(args[0]);
+        VerificationMethod method = VerificationMethod.NAIVE;
+        if (args.length > 1) {
+            method = VerificationMethod.valueOf(args[1]);
+        }
+        crackPassword(args[0], method);
+    }
+
+    private enum VerificationMethod {
+        NAIVE,
+        BITWISE,
+        SAFE_READABLE
     }
 }
